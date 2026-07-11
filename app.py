@@ -1,19 +1,29 @@
+
 import streamlit as st
-import fitz
 import pytesseract
 import re
 import time
+from deep_translator import GoogleTranslator
 
 from docx import Document
 from pptx import Presentation
 from pdf2image import convert_from_bytes
 
+try:
+    import fitz
+except ImportError:
+    fitz = None
+
+
 # ----------------------------------
 # TESSERACT PATH
 # ----------------------------------
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+import os
+
+if os.name == "nt":
+    pytesseract.pytesseract.tesseract_cmd = (
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    )
 
 # ----------------------------------
 # PAGE CONFIG
@@ -32,7 +42,7 @@ if "auto_scroll" not in st.session_state:
 # Load true Variable-Weight Web Fonts across the full spectrum (300 to 900 weight)
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,300..900;1,300..900&family=Merriweather:ital,wght@0,300..900;1,300..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Bitter:ital,wght@0,300..900;1,300..900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Lora:wght@300..900&family=Merriweather:wght@300..900&family=Playfair+Display:wght@400..900&family=Courier+Prime:wght@400;700&family=Bitter:wght@300..900&family=Dancing+Script:wght@400..700&family=Caveat:wght@400..700&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&display=swap');
         
         .block-container { padding-top: 1rem; padding-bottom: 1rem; max-width: 1000px !important; }
         div[data-testid="stSidebarCollapseButton"] { display: none; }
@@ -93,17 +103,25 @@ def ocr_pdf(pdf_file):
     return text
 
 def extract_pdf(file):
+    if fitz is None:
+        st.error(
+            "PyMuPDF is not installed. Run: pip install pymupdf"
+        )
+        return ""
+
     text = ""
     try:
         file.seek(0)
         pdf = fitz.open(stream=file.read(), filetype="pdf")
+
         for page in pdf:
             text += page.get_text() + "\n\n"
+
         pdf.close()
-        if not text.strip():
-            text = ocr_pdf(file)
+
     except Exception as e:
-        st.error(f"PDF Extraction Error: {str(e)}")
+        st.error(f"PDF Extraction Error: {e}")
+
     return text
 
 def extract_docx(file):
@@ -137,11 +155,27 @@ if not st.session_state.zen_mode:
     st.sidebar.title("📖 Book Typography")
     font_display_name = st.sidebar.selectbox(
         "Typeface Design",
-        ["Lora (Editorial Serif)", "Merriweather (Thick Book-serif)", "Bitter (Highly Legible Slab)", "Playfair (High-Contrast Display)", "Courier Prime (Monospace)"]
+        [
+            "Lora (Editorial Serif)",
+            "Merriweather (Book Serif)",
+            "Bitter (Slab Serif)",
+            "Playfair (Luxury Serif)",
+            "Courier Prime (Monospace)",
+            "Dancing Script (Cursive)",
+            "Caveat (Handwriting)",
+            "Cormorant Garamond (Elegant Italic)"
+        ]
     )
     
-    # Precise responsive layout limits
-    font_size = st.sidebar.slider("Font Size (px)", 14, 50, 22)
+    # Font size control
+    font_size = st.sidebar.slider(
+        "Font Size",
+        min_value=12,
+        max_value=48,
+        value=22,
+        step=1
+    )
+
     font_weight = st.sidebar.slider("Letter Thickness (Weight)", 300, 900, 400, step=50)
     line_height = st.sidebar.slider("Line Spacing", 1.2, 3.0, 1.8, step=0.1)
     letter_spacing = st.sidebar.slider("Tracking (Letter Gap)", -2, 8, 0)
@@ -151,6 +185,32 @@ if not st.session_state.zen_mode:
     st.sidebar.subheader("🎨 Paper Stock Finish")
     theme = st.sidebar.selectbox("Palette Presets", ["Vintage Cream", "Textured Antique", "Bleached Pulp", "Charcoal Slate"])
     words_per_page = st.sidebar.slider("Words Per Page Density", 100, 500, 240, step=20)
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🌐 Translation")
+
+    translation_language = st.sidebar.selectbox(
+        "Translate To",
+        [
+            "Original",
+            "Hindi",
+            "Bengali",
+            "Gujarati",
+            "Tamil",
+            "Telugu",
+            "Marathi",
+            "Odia"
+        ]
+    )
+
+    language_codes = {
+        "Hindi": "hi",
+        "Bengali": "bn",
+        "Gujarati": "gu",
+        "Tamil": "ta",
+        "Telugu": "te",
+        "Marathi": "mr",
+        "Odia": "or"
+    }
 else:
     # Stable fallback variables while hidden
     font_display_name = "Lora (Editorial Serif)"
@@ -170,12 +230,75 @@ style_config = theme_presets[theme]
 # Mapping strictly to loaded Google Variable Font stacks
 font_map = {
     "Lora (Editorial Serif)": "'Lora', Georgia, serif",
-    "Merriweather (Thick Book-serif)": "'Merriweather', serif",
-    "Bitter (Highly Legible Slab)": "'Bitter', serif",
-    "Playfair (High-Contrast Display)": "'Playfair Display', serif",
-    "Courier Prime (Monospace)": "'Courier Prime', monospace"
+    "Merriweather (Book Serif)": "'Merriweather', serif",
+    "Bitter (Slab Serif)": "'Bitter', serif",
+    "Playfair (Luxury Serif)": "'Playfair Display', serif",
+    "Courier Prime (Monospace)": "'Courier Prime', monospace",
+    "Dancing Script (Cursive)": "'Dancing Script', cursive",
+    "Caveat (Handwriting)": "'Caveat', handwriting",
+    "Cormorant Garamond (Elegant Italic)": "'Cormorant Garamond', italic"
 }
 font_family = font_map[font_display_name]
+
+if "zoom_factor" not in st.session_state:
+    st.session_state.zoom_factor = 1.0
+
+effective_font_size = int(
+    font_size * st.session_state.zoom_factor
+)
+
+
+if "zoom_factor" not in st.session_state:
+    st.session_state.zoom_factor = 1.0
+
+zoom_col1, zoom_col2, zoom_col3 = st.columns([1,1,2])
+
+with zoom_col1:
+    if st.button("➕ Zoom In"):
+        st.session_state.zoom_factor += 0.1
+
+with zoom_col2:
+    if st.button("➖ Zoom Out"):
+        st.session_state.zoom_factor = max(
+            0.5,    
+            st.session_state.zoom_factor - 0.1
+        )
+
+with zoom_col3:
+    st.write(f"Zoom: {int(st.session_state.zoom_factor*100)}%")
+
+    if translation_language != "Original":
+        st.info(
+            f"Displaying translated content in {translation_language}"
+        )
+
+language_codes = {
+    "Hindi": "hi",
+    "Bengali": "bn",
+    "Gujarati": "gu",
+    "Tamil": "ta",
+    "Telugu": "te",
+    "Marathi": "mr",
+    "Odia": "or"
+}
+
+@st.cache_data(show_spinner=False)
+def translate_text(text, target_language):
+    try:
+        if target_language == "Original":
+            return text
+
+        lang_code = language_codes[target_language]
+
+        translated = GoogleTranslator(
+            source="auto",
+            target=lang_code
+        ).translate(text)
+
+        return translated
+
+    except Exception:
+        return text
 
 # ----------------------------------
 # APP CORE EXECUTION
@@ -213,6 +336,22 @@ if uploaded_file is not None:
 
     current_idx = st.session_state.current_para
     current_page_text = pages[current_idx]
+
+    plain_text = re.sub(
+        r"<[^>]+>",
+        "",
+        current_page_text
+    )
+
+    if translation_language != "Original":
+        translated_text = translate_text(
+            plain_text,
+            translation_language
+        )
+
+        current_page_text = (
+            f'<p class="kindle-p">{translated_text}</p>'
+        )
 
     total_remaining_pages = len(pages) - (current_idx + 1)
     minutes_left = max(1, int((total_remaining_pages * words_per_page) / 220))
@@ -262,7 +401,7 @@ if uploaded_file is not None:
         
         <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: linear-gradient(to right, rgba(0,0,0,0.02), transparent); pointer-events: none;"></div>
 
-        <div style="font-family: {font_family} !important; font-size: {font_size}px !important; font-weight: {font_weight} !important; color: {style_config['text']}; line-height: {line_height} !important; letter-spacing: {letter_spacing}px !important; text-align: justify; text-justify: inter-word; hyphens: auto; display: block; clear: both;">
+        <div style="font-family: {font_family} !important; font-size: {effective_font_size}px !important; font-weight: {font_weight} !important; color: {style_config['text']}; line-height: {line_height} !important; letter-spacing: {letter_spacing}px !important; text-align: justify; text-justify: inter-word; hyphens: auto; display: block; clear: both;">
             {current_page_text}
         </div>
 
@@ -314,12 +453,30 @@ if uploaded_file is not None:
             <script>
             function readText() {{
                 var message = new SpeechSynthesisUtterance(`{safe_text}`);
-                message.rate = 1.0; message.pitch = 1.0;
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.speak(message);
-            }}
-            function stopReading() {{ window.speechSynthesis.cancel(); }}
-            </script>
+                
+                speech_lang = {
+                "Hindi":"hi-IN",
+                "Bengali":"bn-IN",
+                "Gujarati":"gu-IN",
+                "Tamil":"ta-IN",
+                "Telugu":"te-IN",
+                "Marathi":"mr-IN",
+                "Odia":"or-IN"
+            }.get(translation_language,"en-US")speech_lang = {
+                "Hindi":"hi-IN",
+                "Bengali":"bn-IN",
+                "Gujarati":"gu-IN",
+                "Tamil":"ta-IN",
+                "Telugu":"te-IN",
+                "Marathi":"mr-IN",
+                "Odia":"or-IN"
+            }.get(translation_language,"en-US")
+            message.lang = speech_lang;
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(message);
+        }}
+        function stopReading() {{ window.speechSynthesis.cancel(); }}
+        </script>
             <div style="display: flex; gap: 10px;">
                 <button onclick="readText()" style="background-color: #007BFF; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Play Audio</button>
                 <button onclick="stopReading()" style="background-color: #6C757D; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Pause</button>
